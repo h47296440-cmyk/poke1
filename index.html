@@ -3,176 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Railway Dashboard Pro</title>
+    <title>Realistic Train Gauge</title>
     <style>
-        :root { --rail-blue: #003366; --panel-bg: #222; --text-green: #00ff00; }
-        body { font-family: 'Courier New', Courier, monospace; margin: 0; background: #111; color: #eee; display: grid; grid-template-columns: 1fr 380px; height: 100vh; overflow: hidden; }
+        :root { --gauge-size: 320px; }
+        body { font-family: 'Courier New', Courier, monospace; background: #222; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        /* メインパネル */
-        main { padding: 20px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
-        .card { background: var(--panel-bg); border: 2px solid #444; padding: 20px; border-radius: 10px; }
+        /* 速度計の外枠 (画像を再現) */
+        .gauge-outer { width: var(--gauge-size); height: var(--gauge-size); background: #f0f0f0; border-radius: 20px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5), 10px 10px 20px rgba(0,0,0,0.8); border: 15px solid #111; position: relative; overflow: hidden; }
+        .gauge-inner { position: absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; background: #fff; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.5); overflow: hidden; }
         
-        /* 速度計エリア */
-        .gauge-container { text-align: center; position: relative; }
-        #speed-gauge { width: 300px; height: 180px; }
-        .speed-digital { font-size: 3em; color: var(--text-green); text-shadow: 0 0 10px var(--text-green); }
+        /* 数字の配置 (CSSで繊細に) */
+        .num { position: absolute; color: #333; font-weight: bold; font-family: Arial, sans-serif; }
+        .num-0   { bottom: 25px; left: 65px; font-size: 40px; }
+        .num-20  { bottom: 65px; left: 35px; font-size: 40px; }
+        .num-40  { top: 110px;   left: 20px; font-size: 40px; }
+        .num-60  { top: 50px;    left: 45px; font-size: 40px; }
+        .num-80  { top: 25px;    left: 135px; font-size: 45px; } /* 80は一番上 */
+        .num-100 { top: 50px;    right: 45px; font-size: 40px; }
+        .num-120 { top: 110px;   right: 20px; font-size: 40px; }
+        .num-140 { bottom: 65px; right: 35px; font-size: 40px; }
+        .num-160 { bottom: 25px; right: 65px; font-size: 40px; }
 
-        /* テレメトリグリッド */
-        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
-        .stat-item { background: #333; padding: 10px; border-radius: 5px; border-left: 4px solid var(--rail-blue); }
-        .label { font-size: 0.8em; color: #aaa; display: block; }
-        .value { font-size: 1.2em; font-weight: bold; color: var(--text-green); }
+        /* ロゴとラベル */
+        .logo { position: absolute; top: 120px; left: 50%; transform: translateX(-50%); color: #ccc; font-size: 14px; opacity: 0.5; }
+        .kmh-label { position: absolute; bottom: 35px; left: 50%; transform: translateX(-50%); color: #333; font-size: 35px; font-weight: bold; font-family: Arial, sans-serif; }
+        .jis-logo { position: absolute; bottom: 60px; right: 80px; width: 15px; height: 15px; border: 1px solid #333; border-radius: 50%; color: #333; font-size: 8px; text-align: center; line-height: 15px; font-family: sans-serif; }
 
-        /* サイドバー（駅ログ） */
-        aside { background: #001a33; padding: 20px; overflow-y: auto; border-left: 3px solid #004080; }
-        .station-log { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #0055ff; }
-        .station-name { font-size: 1.2em; color: #fff; font-weight: bold; }
-        
-        button { background: #444; color: white; border: 1px solid #666; padding: 10px; cursor: pointer; width: 100%; margin-top: 10px; }
-        button:hover { background: #555; }
-        @media (max-width: 900px) { body { grid-template-columns: 1fr; } }
+        /* Canvas (目盛りと針) */
+        #gauge-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+        /* テレメトリエリア */
+        .telemetry { width: var(--gauge-size); background: #333; margin-top: 20px; padding: 15px; border-radius: 10px; border: 1px solid #555; }
+        .stat { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; color: #0f0; }
+        #status-bar { width: var(--gauge-size); background: #111; color: #f00; text-align: center; padding: 5px; margin-top: 10px; font-size: 12px; }
     </style>
 </head>
 <body>
 
-<main>
-    <div class="card gauge-container">
-        <canvas id="speed-gauge"></canvas>
-        <div class="speed-digital"><span id="speed-num">0</span> <small style="font-size: 0.4em;">km/h</small></div>
-    </div>
+    <div class="gauge-outer">
+        <div class="gauge-inner">
+            <canvas id="gauge-canvas"></canvas>
+            
+            <div class="num num-0">0</div>
+            <div class="num num-20">20</div>
+            <div class="num num-40">40</div>
+            <div class="num num-60">60</div>
+            <div class="num num-80">80</div>
+            <div class="num num-100">100</div>
+            <div class="num num-120">120</div>
+            <div class="num num-140">140</div>
+            <div class="num num-160">160</div>
 
-    <div class="card">
-        <h3>🛰️ 運行テレメトリ</h3>
-        <div class="stats-grid">
-            <div class="stat-item"><span class="label">緯度</span><span class="value" id="lat">--</span></div>
-            <div class="stat-item"><span class="label">経度</span><span class="value" id="lon">--</span></div>
-            <div class="stat-item"><span class="label">高度</span><span class="value" id="alt">--</span></div>
-            <div class="stat-item"><span class="label">進行方位</span><span class="value" id="heading">--</span></div>
-            <div class="stat-item"><span class="label">位置精度</span><span class="value" id="acc">--</span></div>
-            <div class="stat-item"><span class="label">現在時刻</span><span class="value" id="clock">--</span></div>
+            <div class="logo">TOYO</div>
+            <div class="kmh-label">km/h</div>
+            <div class="jis-logo">JIS</div>
         </div>
     </div>
 
-    <div class="card">
-        <span class="label">現在位置付近の住所</span>
-        <div id="address" style="font-size: 0.9em; margin-top: 5px;">取得中...</div>
-        <button onclick="openMap()">Google Maps 展望画面</button>
+    <div class="telemetry">
+        <div class="stat"><span>LAT</span><span id="lat">---</span></div>
+        <div class="stat"><span>LON</span><span id="lon">---</span></div>
+        <div class="stat"><span>ALT</span><span id="alt">---</span></div>
+        <div class="stat"><span>SPEED(DG)</span><span id="speed-dg">0</span> km/h</div>
     </div>
-</main>
 
-<aside>
-    <h3 style="border-bottom: 2px solid #0055ff; padding-bottom: 10px;">🕒 クラウド停車記録</h3>
-    <div id="station-list">接続中...</div>
-</aside>
+    <div id="status-bar">GPS受信待機中...</div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-    // あなたのFirebase設定
-    const firebaseConfig = {
-        apiKey: "AIzaSyBSQeJUklIBwOF8Hq1rJHag7ujW3FjcugM",
-        authDomain: "mystationlog-ac840.firebaseapp.com",
-        projectId: "mystationlog-ac840",
-        storageBucket: "mystationlog-ac840.firebasestorage.app",
-        messagingSenderId: "601219479756",
-        appId: "1:601219479756:web:05313f83b955731dc96a69",
-        measurementId: "G-GT4DEJ7V14"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const stationCol = collection(db, "stations");
-
-    let lastPos = { lat: 0, lon: 0 };
-    let knownStations = new Set();
-
-    // 1. 速度計の描画 (Canvas)
-    const canvas = document.getElementById('speed-gauge');
+<script>
+    // Canvasの設定
+    const canvas = document.getElementById('gauge-canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 300; canvas.height = 180;
+    const size = 300; // gauge-innerのサイズに合わせる
+    canvas.width = size; canvas.height = size;
 
-    function drawGauge(speed) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const centerX = 150, centerY = 160, radius = 130;
-        
-        // メーターの枠
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, Math.PI, 2 * Math.PI);
-        ctx.strokeStyle = '#444'; ctx.lineWidth = 15; ctx.stroke();
+    // メーターの設定 (画像から割り出し)
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const radius = size * 0.45;
+    const startAngle = Math.PI * 0.75; // 0km/hの位置 (左下)
+    const endAngle = Math.PI * 2.25;   // 160km/hの位置 (右下)
+    const angleRange = endAngle - startAngle;
 
-        // 速度目盛り
-        const angle = Math.PI + (Math.min(speed, 160) / 160) * Math.PI;
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, Math.PI, angle);
-        ctx.strokeStyle = var(--text-green); ctx.lineWidth = 15; ctx.stroke();
-
-        // 針
+    function drawGaugeBackground() {
+        ctx.clearRect(0, 0, size, size);
         ctx.save();
         ctx.translate(centerX, centerY);
-        ctx.rotate(angle);
-        ctx.beginPath();
-        ctx.moveTo(0, 0); ctx.lineTo(radius - 20, 0);
-        ctx.strokeStyle = 'white'; ctx.lineWidth = 4; ctx.stroke();
+        ctx.rotate(startAngle); // 0km/hの角度を基準にする
+
+        // 1. 繊細な目盛りの描画
+        for (let s = 0; s <= 160; s += 2) {
+            ctx.save();
+            const angle = (s / 160) * angleRange;
+            ctx.rotate(angle);
+
+            ctx.beginPath();
+            ctx.moveTo(radius - 5, 0);
+            ctx.lineTo(radius, 0);
+
+            if (s % 10 === 0) {
+                // 10km/hごとの太い目盛り
+                ctx.strokeStyle = '#333'; ctx.lineWidth = 3;
+                ctx.moveTo(radius - 15, 0);
+            } else if (s % 2 === 0) {
+                // 2km/hごとの細い目盛り
+                ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
         ctx.restore();
     }
 
-    // 2. Firebase同期
-    const q = query(stationCol, orderBy("time", "desc"));
-    onSnapshot(q, (snapshot) => {
-        const list = document.getElementById('station-list');
-        list.innerHTML = "";
-        snapshot.forEach(doc => {
-            const s = doc.data();
-            knownStations.add(s.name);
-            list.innerHTML += `<div class="station-log">
-                <div class="station-name">${s.name}駅</div>
-                <div style="font-size:0.8em; color:#aaa;">${s.line}</div>
-                <div style="font-size:0.7em; color:var(--text-green); margin-top:5px;">🕒 ${s.time}</div>
-            </div>`;
-        });
-    });
+    function drawNeedle(speed) {
+        // 背景（目盛り）を再描画
+        drawGaugeBackground();
 
-    // 3. メイン処理 (Geolocation)
-    navigator.geolocation.watchPosition(async (pos) => {
-        const c = pos.coords;
-        lastPos.lat = c.latitude;
-        lastPos.lon = c.longitude;
+        // 2. 針の描画 (画像のデザインを再現)
+        const currentSpeed = Math.min(speed, 160);
+        const angle = startAngle + (currentSpeed / 160) * angleRange;
 
-        // 数値表示更新
-        document.getElementById('lat').textContent = c.latitude.toFixed(5);
-        document.getElementById('lon').textContent = c.longitude.toFixed(5);
-        document.getElementById('alt').textContent = c.altitude ? Math.round(c.altitude) + "m" : "0m";
-        document.getElementById('heading').textContent = c.heading ? Math.round(c.heading) + "°" : "--";
-        document.getElementById('acc').textContent = "±" + Math.round(c.accuracy) + "m";
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(angle);
+
+        // 針の本体
+        ctx.beginPath();
+        ctx.moveTo(-20, 0); // 根元を少し後ろへ
+        ctx.lineTo(radius - 20, 0); // 先端
+        ctx.strokeStyle = '#111'; ctx.lineWidth = 4; ctx.stroke();
+
+        // 根元の黒い円 (画像の中心部分)
+        ctx.beginPath();
+        ctx.arc(0, 0, 15, 0, Math.PI * 2);
+        ctx.fillStyle = '#111'; ctx.fill();
         
-        const kmh = c.speed ? Math.round(c.speed * 3.6) : 0;
-        document.getElementById('speed-num').textContent = kmh;
-        drawGauge(kmh);
+        // 中心の白い点
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff'; ctx.fill();
 
-        // 住所取得
-        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${c.latitude}&lon=${c.longitude}`)
-            .then(r => r.json()).then(d => document.getElementById('address').textContent = d.display_name);
+        ctx.restore();
+    }
 
-        // 最寄り駅保存
-        try {
-            const res = await fetch(`https://express.heartrails.com/api/json?method=getStations&x=${c.longitude}&y=${c.latitude}`);
-            const data = await res.json();
-            const s = data.response.station?.[0];
-            if (s && !knownStations.has(s.name)) {
-                await addDoc(stationCol, { name: s.name, line: s.line, time: new Date().toLocaleString('ja-JP') });
-            }
-        } catch (e) {}
-    }, null, { enableHighAccuracy: true });
+    // --- Geolocation ---
+    const latDiv = document.getElementById('lat');
+    const lonDiv = document.getElementById('lon');
+    const altDiv = document.getElementById('alt');
+    const speedDgDiv = document.getElementById('speed-dg');
+    const statusDiv = document.getElementById('status-bar');
 
-    // 時計
-    setInterval(() => {
-        document.getElementById('clock').textContent = new Date().toLocaleTimeString();
-    }, 1000);
+    // 初期描画
+    drawNeedle(0);
 
-    window.openMap = () => window.open(`https://www.google.com/maps?q=${lastPos.lat},${lastPos.lon}`);
-    drawGauge(0);
+    if (!navigator.geolocation) {
+        statusDiv.textContent = "GPS非対応ブラウザです";
+    } else {
+        statusDiv.textContent = "GPS許可待ち...";
+        navigator.geolocation.watchPosition((pos) => {
+            statusDiv.textContent = "正常動作中";
+            statusDiv.style.color = "#0f0";
+
+            const c = pos.coords;
+            latDiv.textContent = c.latitude.toFixed(5);
+            lonDiv.textContent = c.longitude.toFixed(5);
+            altDiv.textContent = c.altitude ? Math.round(c.altitude) + "m" : "--";
+            
+            const kmh = c.speed ? c.speed * 3.6 : 0;
+            // デジタル表示
+            speedDgDiv.textContent = Math.round(kmh);
+            // アナログ針移動
+            drawNeedle(kmh);
+
+        }, (err) => {
+            statusDiv.textContent = `GPSエラー: ${err.message}`;
+            statusDiv.style.color = "#f00";
+        }, { enableHighAccuracy: true });
+    }
 </script>
-
 </body>
 </html>
