@@ -3,94 +3,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>自動駅訪問ログ</title>
+    <title>Multi-API Location Dashboard</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        #log-container { background: #f9f9f9; border: 1px solid #ddd; padding: 15px; border-radius: 8px; min-height: 200px; }
-        .station-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; }
-        .time { color: #888; font-size: 0.8em; }
-        .status { color: #007bff; font-weight: bold; }
+        :root { --primary: #2c3e50; --accent: #e74c3c; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #ecf0f1; display: grid; grid-template-columns: 1fr 350px; height: 100vh; }
+        
+        /* メインエリア（地図と基本情報） */
+        main { padding: 20px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        /* サイドバー（ログ） */
+        aside { background: var(--primary); color: white; padding: 20px; overflow-y: auto; }
+        
+        /* 地図エリア */
+        #map-container { height: 300px; background: #ddd; border-radius: 12px; display: flex; align-items: center; justify-content: center; position: relative; }
+        
+        /* ステータスバッジ */
+        .badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 0.8em; margin-top: 10px; }
+        .active { background: #2ecc71; color: white; }
+
+        /* グリッドレイアウト */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+        .stat-box { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 1.2em; font-weight: bold; color: var(--primary); }
+        
+        .station-log { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; font-size: 0.9em; }
+        button { background: var(--accent); color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h2>🚉 自動駅訪問ログ（テスト）</h2>
-    <p>ステータス: <span id="status" class="status">待機中...</span></p>
-    
-    <div id="log-container">
-        <strong>訪れた駅リスト:</strong>
-        <div id="station-list">
+<main>
+    <div class="card">
+        <h2>📍 高精密ロケーション・ダッシュボード</h2>
+        <div id="map-container">
+            <div id="map-placeholder">
+                <p>現在地を特定するとGoogleマップリンクが表示されます</p>
+                <a id="map-link" href="#" target="_blank" style="display:none; color:blue;">別タブで地図を開く</a>
             </div>
+        </div>
+        <div class="badge active" id="gps-status">GPS: 待機中</div>
     </div>
 
-    <script>
-        let visitedStations = new Set(); // 重複チェック用
-        let watchId = null;
+    <div class="card">
+        <h3>📊 リアルタイム・テレメトリ</h3>
+        <div class="stats-grid">
+            <div class="stat-box"><div>緯度</div><div class="stat-value" id="lat">--</div></div>
+            <div class="stat-box"><div>経度</div><div class="stat-value" id="lon">--</div></div>
+            <div class="stat-box"><div>高度</div><div class="stat-value" id="alt">--</div></div>
+            <div class="stat-box"><div>速度</div><div class="stat-value" id="speed">--</div></div>
+            <div class="stat-box"><div>進行方向</div><div class="stat-value" id="heading">--</div></div>
+        </div>
+    </div>
 
-        // ページ読み込み時に監視開始
-        window.onload = startWatching;
+    <div class="card">
+        <h3>🏢 周辺住所 (Reverse Geocoding)</h3>
+        <p id="address">住所を取得中...</p>
+    </div>
+</main>
 
-        function startWatching() {
-            if (!navigator.geolocation) {
-                alert("位置情報に対応していません");
-                return;
+<aside>
+    <h3>🚉 自動駅訪問ログ</h3>
+    <p style="font-size: 0.8em; opacity: 0.7;">移動すると自動で駅が追加されます</p>
+    <div id="station-list">
+        </div>
+</aside>
+
+<script>
+    let visitedStations = new Set();
+
+    function startTracking() {
+        if (!navigator.geolocation) return alert("非対応ブラウザです");
+
+        const options = { enableHighAccuracy: true, maximumAge: 0 };
+        navigator.geolocation.watchPosition(updateDashboard, handleError, options);
+    }
+
+    async function updateDashboard(pos) {
+        const { latitude, longitude, altitude, speed, heading } = pos.coords;
+
+        // 1. 画面の数値を更新
+        document.getElementById('lat').textContent = latitude.toFixed(5);
+        document.getElementById('lon').textContent = longitude.toFixed(5);
+        document.getElementById('alt').textContent = altitude ? `${altitude.toFixed(1)}m` : 'N/A';
+        document.getElementById('speed').textContent = speed ? `${(speed * 3.6).toFixed(1)}km/h` : '0';
+        document.getElementById('heading').textContent = heading ? `${heading.toFixed(0)}°` : '--';
+
+        // 2. 地図リンクの更新
+        const mapLink = document.getElementById('map-link');
+        mapLink.href = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        mapLink.style.display = 'block';
+
+        // 3. 駅データAPI (HeartRails)
+        fetchStation(latitude, longitude);
+
+        // 4. 住所取得API (逆ジオコーディング: OpenStreetMap Nominatimを使用)
+        fetchAddress(latitude, longitude);
+    }
+
+    async function fetchStation(lat, lon) {
+        try {
+            const res = await fetch(`https://express.heartrails.com/api/json?method=getStations&x=${lon}&y=${lat}`);
+            const data = await res.json();
+            const station = data.response.station?.[0];
+            if (station && !visitedStations.has(station.name)) {
+                visitedStations.add(station.name);
+                const log = document.getElementById('station-list');
+                log.innerHTML = `<div class="station-log">
+                    <strong>${station.name}駅</strong><br>
+                    <small>${station.line} - ${new Date().toLocaleTimeString()}</small>
+                </div>` + log.innerHTML;
             }
+        } catch (e) { console.error("Station API Error"); }
+    }
 
-            const options = {
-                enableHighAccuracy: true, // 高精度モード
-                maximumAge: 30000,        // 30秒間キャッシュを利用
-                timeout: 27000            // タイムアウト設定
-            };
+    async function fetchAddress(lat, lon) {
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+            const data = await res.json();
+            document.getElementById('address').textContent = data.display_name || "住所不明";
+        } catch (e) { console.error("Address API Error"); }
+    }
 
-            // 位置情報の継続的な監視を開始
-            watchId = navigator.geolocation.watchPosition(checkNearestStation, handleError, options);
-            document.getElementById("status").textContent = "現在地を監視中...";
-        }
+    function handleError(err) {
+        document.getElementById('gps-status').textContent = `Error: ${err.message}`;
+        document.getElementById('gps-status').style.background = 'red';
+    }
 
-        function checkNearestStation(position) {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
+    // 起動
+    startTracking();
+</script>
 
-            // HeartRails APIを呼び出す
-            const url = `https://express.heartrails.com/api/json?method=getStations&x=${lon}&y=${lat}`;
-
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    const stations = data.response.station;
-                    if (stations && stations.length > 0) {
-                        const nearest = stations[0].name;
-                        const line = stations[0].line;
-
-                        // まだ追加されていない駅ならリストに追加
-                        if (!visitedStations.has(nearest)) {
-                            addStationToList(nearest, line);
-                        }
-                    }
-                })
-                .catch(err => console.error("API Error:", err));
-        }
-
-        function addStationToList(name, line) {
-            visitedStations.add(name);
-            const list = document.getElementById("station-list");
-            const now = new Date().toLocaleTimeString();
-            
-            const item = document.createElement("div");
-            item.className = "station-item";
-            item.innerHTML = `
-                <span><strong>${name}駅</strong> (${line})</span>
-                <span class="time">${now} 通過/到着</span>
-            `;
-            list.prepend(item); // 上に新しく追加
-            
-            // 通知（ブラウザの設定による）
-            console.log(`新着駅: ${name}`);
-        }
-
-        function handleError(error) {
-            console.warn(`ERROR(${error.code}): ${error.message}`);
-        }
-    </script>
 </body>
 </html>
