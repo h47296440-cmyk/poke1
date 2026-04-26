@@ -3,135 +3,175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-API Location Dashboard</title>
+    <title>Railway Dashboard Pro</title>
     <style>
-        :root { --primary: #2c3e50; --accent: #e74c3c; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #ecf0f1; display: grid; grid-template-columns: 1fr 350px; height: 100vh; }
+        :root { --rail-blue: #003366; --panel-bg: #222; --text-green: #00ff00; }
+        body { font-family: 'Courier New', Courier, monospace; margin: 0; background: #111; color: #eee; display: grid; grid-template-columns: 1fr 380px; height: 100vh; overflow: hidden; }
         
-        /* メインエリア（地図と基本情報） */
+        /* メインパネル */
         main { padding: 20px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
-        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .card { background: var(--panel-bg); border: 2px solid #444; padding: 20px; border-radius: 10px; }
         
-        /* サイドバー（ログ） */
-        aside { background: var(--primary); color: white; padding: 20px; overflow-y: auto; }
-        
-        /* 地図エリア */
-        #map-container { height: 300px; background: #ddd; border-radius: 12px; display: flex; align-items: center; justify-content: center; position: relative; }
-        
-        /* ステータスバッジ */
-        .badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 0.8em; margin-top: 10px; }
-        .active { background: #2ecc71; color: white; }
+        /* 速度計エリア */
+        .gauge-container { text-align: center; position: relative; }
+        #speed-gauge { width: 300px; height: 180px; }
+        .speed-digital { font-size: 3em; color: var(--text-green); text-shadow: 0 0 10px var(--text-green); }
 
-        /* グリッドレイアウト */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-        .stat-box { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; }
-        .stat-value { font-size: 1.2em; font-weight: bold; color: var(--primary); }
+        /* テレメトリグリッド */
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .stat-item { background: #333; padding: 10px; border-radius: 5px; border-left: 4px solid var(--rail-blue); }
+        .label { font-size: 0.8em; color: #aaa; display: block; }
+        .value { font-size: 1.2em; font-weight: bold; color: var(--text-green); }
+
+        /* サイドバー（駅ログ） */
+        aside { background: #001a33; padding: 20px; overflow-y: auto; border-left: 3px solid #004080; }
+        .station-log { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #0055ff; }
+        .station-name { font-size: 1.2em; color: #fff; font-weight: bold; }
         
-        .station-log { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px; font-size: 0.9em; }
-        button { background: var(--accent); color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
+        button { background: #444; color: white; border: 1px solid #666; padding: 10px; cursor: pointer; width: 100%; margin-top: 10px; }
+        button:hover { background: #555; }
+        @media (max-width: 900px) { body { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
 <main>
-    <div class="card">
-        <h2>📍 高精密ロケーション・ダッシュボード</h2>
-        <div id="map-container">
-            <div id="map-placeholder">
-                <p>現在地を特定するとGoogleマップリンクが表示されます</p>
-                <a id="map-link" href="#" target="_blank" style="display:none; color:blue;">別タブで地図を開く</a>
-            </div>
-        </div>
-        <div class="badge active" id="gps-status">GPS: 待機中</div>
+    <div class="card gauge-container">
+        <canvas id="speed-gauge"></canvas>
+        <div class="speed-digital"><span id="speed-num">0</span> <small style="font-size: 0.4em;">km/h</small></div>
     </div>
 
     <div class="card">
-        <h3>📊 リアルタイム・テレメトリ</h3>
+        <h3>🛰️ 運行テレメトリ</h3>
         <div class="stats-grid">
-            <div class="stat-box"><div>緯度</div><div class="stat-value" id="lat">--</div></div>
-            <div class="stat-box"><div>経度</div><div class="stat-value" id="lon">--</div></div>
-            <div class="stat-box"><div>高度</div><div class="stat-value" id="alt">--</div></div>
-            <div class="stat-box"><div>速度</div><div class="stat-value" id="speed">--</div></div>
-            <div class="stat-box"><div>進行方向</div><div class="stat-value" id="heading">--</div></div>
+            <div class="stat-item"><span class="label">緯度</span><span class="value" id="lat">--</span></div>
+            <div class="stat-item"><span class="label">経度</span><span class="value" id="lon">--</span></div>
+            <div class="stat-item"><span class="label">高度</span><span class="value" id="alt">--</span></div>
+            <div class="stat-item"><span class="label">進行方位</span><span class="value" id="heading">--</span></div>
+            <div class="stat-item"><span class="label">位置精度</span><span class="value" id="acc">--</span></div>
+            <div class="stat-item"><span class="label">現在時刻</span><span class="value" id="clock">--</span></div>
         </div>
     </div>
 
     <div class="card">
-        <h3>🏢 周辺住所 (Reverse Geocoding)</h3>
-        <p id="address">住所を取得中...</p>
+        <span class="label">現在位置付近の住所</span>
+        <div id="address" style="font-size: 0.9em; margin-top: 5px;">取得中...</div>
+        <button onclick="openMap()">Google Maps 展望画面</button>
     </div>
 </main>
 
 <aside>
-    <h3>🚉 自動駅訪問ログ</h3>
-    <p style="font-size: 0.8em; opacity: 0.7;">移動すると自動で駅が追加されます</p>
-    <div id="station-list">
-        </div>
+    <h3 style="border-bottom: 2px solid #0055ff; padding-bottom: 10px;">🕒 クラウド停車記録</h3>
+    <div id="station-list">接続中...</div>
 </aside>
 
-<script>
-    let visitedStations = new Set();
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    function startTracking() {
-        if (!navigator.geolocation) return alert("非対応ブラウザです");
+    // あなたのFirebase設定
+    const firebaseConfig = {
+        apiKey: "AIzaSyBSQeJUklIBwOF8Hq1rJHag7ujW3FjcugM",
+        authDomain: "mystationlog-ac840.firebaseapp.com",
+        projectId: "mystationlog-ac840",
+        storageBucket: "mystationlog-ac840.firebasestorage.app",
+        messagingSenderId: "601219479756",
+        appId: "1:601219479756:web:05313f83b955731dc96a69",
+        measurementId: "G-GT4DEJ7V14"
+    };
 
-        const options = { enableHighAccuracy: true, maximumAge: 0 };
-        navigator.geolocation.watchPosition(updateDashboard, handleError, options);
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const stationCol = collection(db, "stations");
+
+    let lastPos = { lat: 0, lon: 0 };
+    let knownStations = new Set();
+
+    // 1. 速度計の描画 (Canvas)
+    const canvas = document.getElementById('speed-gauge');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 300; canvas.height = 180;
+
+    function drawGauge(speed) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const centerX = 150, centerY = 160, radius = 130;
+        
+        // メーターの枠
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, Math.PI, 2 * Math.PI);
+        ctx.strokeStyle = '#444'; ctx.lineWidth = 15; ctx.stroke();
+
+        // 速度目盛り
+        const angle = Math.PI + (Math.min(speed, 160) / 160) * Math.PI;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, Math.PI, angle);
+        ctx.strokeStyle = var(--text-green); ctx.lineWidth = 15; ctx.stroke();
+
+        // 針
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(radius - 20, 0);
+        ctx.strokeStyle = 'white'; ctx.lineWidth = 4; ctx.stroke();
+        ctx.restore();
     }
 
-    async function updateDashboard(pos) {
-        const { latitude, longitude, altitude, speed, heading } = pos.coords;
+    // 2. Firebase同期
+    const q = query(stationCol, orderBy("time", "desc"));
+    onSnapshot(q, (snapshot) => {
+        const list = document.getElementById('station-list');
+        list.innerHTML = "";
+        snapshot.forEach(doc => {
+            const s = doc.data();
+            knownStations.add(s.name);
+            list.innerHTML += `<div class="station-log">
+                <div class="station-name">${s.name}駅</div>
+                <div style="font-size:0.8em; color:#aaa;">${s.line}</div>
+                <div style="font-size:0.7em; color:var(--text-green); margin-top:5px;">🕒 ${s.time}</div>
+            </div>`;
+        });
+    });
 
-        // 1. 画面の数値を更新
-        document.getElementById('lat').textContent = latitude.toFixed(5);
-        document.getElementById('lon').textContent = longitude.toFixed(5);
-        document.getElementById('alt').textContent = altitude ? `${altitude.toFixed(1)}m` : 'N/A';
-        document.getElementById('speed').textContent = speed ? `${(speed * 3.6).toFixed(1)}km/h` : '0';
-        document.getElementById('heading').textContent = heading ? `${heading.toFixed(0)}°` : '--';
+    // 3. メイン処理 (Geolocation)
+    navigator.geolocation.watchPosition(async (pos) => {
+        const c = pos.coords;
+        lastPos.lat = c.latitude;
+        lastPos.lon = c.longitude;
 
-        // 2. 地図リンクの更新
-        const mapLink = document.getElementById('map-link');
-        mapLink.href = `https://www.google.com/maps?q=${latitude},${longitude}`;
-        mapLink.style.display = 'block';
+        // 数値表示更新
+        document.getElementById('lat').textContent = c.latitude.toFixed(5);
+        document.getElementById('lon').textContent = c.longitude.toFixed(5);
+        document.getElementById('alt').textContent = c.altitude ? Math.round(c.altitude) + "m" : "0m";
+        document.getElementById('heading').textContent = c.heading ? Math.round(c.heading) + "°" : "--";
+        document.getElementById('acc').textContent = "±" + Math.round(c.accuracy) + "m";
+        
+        const kmh = c.speed ? Math.round(c.speed * 3.6) : 0;
+        document.getElementById('speed-num').textContent = kmh;
+        drawGauge(kmh);
 
-        // 3. 駅データAPI (HeartRails)
-        fetchStation(latitude, longitude);
+        // 住所取得
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${c.latitude}&lon=${c.longitude}`)
+            .then(r => r.json()).then(d => document.getElementById('address').textContent = d.display_name);
 
-        // 4. 住所取得API (逆ジオコーディング: OpenStreetMap Nominatimを使用)
-        fetchAddress(latitude, longitude);
-    }
-
-    async function fetchStation(lat, lon) {
+        // 最寄り駅保存
         try {
-            const res = await fetch(`https://express.heartrails.com/api/json?method=getStations&x=${lon}&y=${lat}`);
+            const res = await fetch(`https://express.heartrails.com/api/json?method=getStations&x=${c.longitude}&y=${c.latitude}`);
             const data = await res.json();
-            const station = data.response.station?.[0];
-            if (station && !visitedStations.has(station.name)) {
-                visitedStations.add(station.name);
-                const log = document.getElementById('station-list');
-                log.innerHTML = `<div class="station-log">
-                    <strong>${station.name}駅</strong><br>
-                    <small>${station.line} - ${new Date().toLocaleTimeString()}</small>
-                </div>` + log.innerHTML;
+            const s = data.response.station?.[0];
+            if (s && !knownStations.has(s.name)) {
+                await addDoc(stationCol, { name: s.name, line: s.line, time: new Date().toLocaleString('ja-JP') });
             }
-        } catch (e) { console.error("Station API Error"); }
-    }
+        } catch (e) {}
+    }, null, { enableHighAccuracy: true });
 
-    async function fetchAddress(lat, lon) {
-        try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
-            const data = await res.json();
-            document.getElementById('address').textContent = data.display_name || "住所不明";
-        } catch (e) { console.error("Address API Error"); }
-    }
+    // 時計
+    setInterval(() => {
+        document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+    }, 1000);
 
-    function handleError(err) {
-        document.getElementById('gps-status').textContent = `Error: ${err.message}`;
-        document.getElementById('gps-status').style.background = 'red';
-    }
-
-    // 起動
-    startTracking();
+    window.openMap = () => window.open(`https://www.google.com/maps?q=${lastPos.lat},${lastPos.lon}`);
+    drawGauge(0);
 </script>
 
 </body>
