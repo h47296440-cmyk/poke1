@@ -3,71 +3,175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>現在地取得テスト</title>
+    <title>Railway Dashboard + Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; }
-        #status { margin-bottom: 20px; font-weight: bold; }
-        #result { background: #f0f0f0; padding: 20px; border-radius: 8px; display: inline-block; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        :root { --gauge-size: 280px; --accent: #0f0; }
+        body { font-family: monospace; background: #1a1a1a; color: #eee; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        /* レイアウト：上部に計器と地図、下部にログ */
+        .top-panel { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; background: #222; border-bottom: 2px solid #333; }
+        
+        /* 速度計 (画像再現) */
+        .gauge-outer { width: var(--gauge-size); height: var(--gauge-size); background: #f0f0f0; border-radius: 15px; border: 10px solid #111; position: relative; flex-shrink: 0; box-shadow: 5px 5px 15px rgba(0,0,0,0.5); }
+        .gauge-inner { position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px; background: #fff; border-radius: 50%; overflow: hidden; }
+        #gauge-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
+        .num { position: absolute; color: #333; font-weight: bold; font-family: Arial; font-size: 32px; z-index: 1; }
+        /* 数字配置 */
+        .n0 { bottom: 20px; left: 55px; } .n80 { top: 15px; left: 50%; transform: translateX(-50%); font-size: 38px; } .n160 { bottom: 20px; right: 55px; }
+        .kmh-label { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); color: #333; font-size: 28px; font-weight: bold; z-index: 1; }
+
+        /* マップエリア */
+        #map { flex-grow: 1; min-width: 300px; height: var(--gauge-size); border-radius: 10px; border: 2px solid #444; }
+
+        /* テレメトリ ＆ ログ */
+        .bottom-panel { flex-grow: 1; display: grid; grid-template-columns: 250px 1fr; overflow: hidden; }
+        .stats { background: #111; padding: 15px; border-right: 1px solid #333; font-size: 13px; color: var(--accent); }
+        .log-container { background: #000; overflow-y: auto; padding: 10px; }
+        .log-entry { padding: 8px; border-bottom: 1px solid #222; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        h3 { margin: 0 0 10px 0; font-size: 14px; border-bottom: 1px solid #444; padding-bottom: 5px; color: #fff; }
+        .btn-clear { background: #444; color: #fff; border: none; padding: 5px; cursor: pointer; font-size: 10px; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <h2>GPS現在地取得テスト</h2>
-    <p id="status">ボタンを押して位置情報の許可をしてください</p>
-    
-    <div id="result">
-        <p>緯度: <span id="latitude">---</span></p>
-        <p>経度: <span id="longitude">---</span></p>
+<div class="top-panel">
+    <div class="gauge-outer">
+        <div class="gauge-inner">
+            <canvas id="gauge-canvas"></canvas>
+            <div class="num n0">0</div>
+            <div class="num n80">80</div>
+            <div class="num n160">160</div>
+            <div class="kmh-label">km/h</div>
+        </div>
     </div>
-    
-    <br><br>
-    <button onclick="getLocation()">現在地を取得する</button>
+    <div id="map"></div>
+</div>
 
-    <script>
-        function getLocation() {
-            const status = document.getElementById("status");
-            const latDisplay = document.getElementById("latitude");
-            const lonDisplay = document.getElementById("longitude");
+<div class="bottom-panel">
+    <div class="stats">
+        <h3>🛰️ TELEMETRY</h3>
+        LAT: <span id="lat">---</span><br>
+        LON: <span id="lon">---</span><br>
+        ALT: <span id="alt">---</span><br><br>
+        <h3>📍 CURRENT ADDR</h3>
+        <div id="addr" style="font-size: 11px; color: #aaa;">取得中...</div>
+        <button class="btn-clear" onclick="clearLog()">履歴消去</button>
+    </div>
+    <div class="log-container">
+        <h3>🕒 STATION LOG (SAVED)</h3>
+        <div id="log-list"></div>
+    </div>
+</div>
 
-            // ブラウザがGeolocation APIに対応しているか確認
-            if (!navigator.geolocation) {
-                status.textContent = "お使いのブラウザは位置情報に対応していません。";
-                return;
-            }
+<script>
+    let visitedStations = JSON.parse(localStorage.getItem('my_station_logs') || '[]');
+    let map, marker;
+    const canvas = document.getElementById('gauge-canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 300; canvas.height = 300;
 
-            status.textContent = "取得中...";
+    // --- 地図の初期化 ---
+    function initMap(lat, lon) {
+        map = L.map('map').setView([lat, lon], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+        marker = L.marker([lat, lon]).addTo(map);
+    }
 
-            // 位置情報の取得を実行
-            navigator.geolocation.getCurrentPosition(
-                // 成功した時の処理
-                (position) => {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
+    // --- 速度計の描画 ---
+    function drawGauge(speed) {
+        ctx.clearRect(0, 0, 300, 300);
+        const cx = 150, cy = 150, r = 130;
+        const start = Math.PI * 0.75;
+        const end = Math.PI * 2.25;
+        const current = start + (Math.min(speed, 160) / 160) * (end - start);
 
-                    status.textContent = "取得成功！";
-                    latDisplay.textContent = lat;
-                    lonDisplay.textContent = lon;
-                },
-                // 失敗した時の処理（エラーハンドリング）
-                (error) => {
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            status.textContent = "位置情報の利用が拒否されました。";
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            status.textContent = "位置情報が利用できません。";
-                            break;
-                        case error.TIMEOUT:
-                            status.textContent = "タイムアウトしました。";
-                            break;
-                        default:
-                            status.textContent = "不明なエラーが発生しました。";
-                            break;
-                    }
-                }
-            );
+        // 目盛り
+        ctx.save(); ctx.translate(cx, cy);
+        for (let i = 0; i <= 160; i += 2) {
+            ctx.save();
+            ctx.rotate(start - Math.PI/2 + (i/160)*(end-start));
+            ctx.beginPath();
+            ctx.moveTo(0, -r); ctx.lineTo(0, i % 10 === 0 ? -r+15 : -r+5);
+            ctx.strokeStyle = i % 10 === 0 ? '#333' : '#999';
+            ctx.lineWidth = i % 10 === 0 ? 3 : 1;
+            ctx.stroke(); ctx.restore();
         }
-    </script>
+        // 針
+        ctx.rotate(current + Math.PI/2);
+        ctx.beginPath(); ctx.moveTo(0, 20); ctx.lineTo(0, -r+10);
+        ctx.strokeStyle = '#e60000'; ctx.lineWidth = 5; ctx.stroke();
+        // 中心
+        ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fillStyle = '#111'; ctx.fill();
+        ctx.restore();
+    }
+
+    // --- メイン処理 ---
+    window.onload = () => {
+        renderLog();
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(updateData, null, { enableHighAccuracy: true });
+        }
+    };
+
+    async function updateData(pos) {
+        const { latitude, longitude, speed, altitude } = pos.coords;
+        const kmh = speed ? speed * 3.6 : 0;
+
+        // 表示更新
+        document.getElementById('lat').textContent = latitude.toFixed(4);
+        document.getElementById('lon').textContent = longitude.toFixed(4);
+        document.getElementById('alt').textContent = altitude ? Math.round(altitude) + "m" : "0m";
+        drawGauge(kmh);
+
+        // 地図更新
+        if (!map) {
+            initMap(latitude, longitude);
+        } else {
+            const newPos = [latitude, longitude];
+            map.panTo(newPos);
+            marker.setLatLng(newPos);
+        }
+
+        // 住所 ＆ 最寄り駅取得
+        try {
+            // 住所
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`)
+                .then(r => r.json()).then(d => document.getElementById('addr').textContent = d.display_name);
+
+            // 駅
+            const res = await fetch(`https://express.heartrails.com/api/json?method=getStations&x=${longitude}&y=${latitude}`);
+            const data = await res.json();
+            const s = data.response.station?.[0];
+
+            if (s && !visitedStations.some(item => item.name === s.name)) {
+                visitedStations.unshift({ name: s.name, line: s.line, time: new Date().toLocaleTimeString() });
+                localStorage.setItem('my_station_logs', JSON.stringify(visitedStations));
+                renderLog();
+            }
+        } catch (e) {}
+    }
+
+    function renderLog() {
+        const list = document.getElementById('log-list');
+        list.innerHTML = visitedStations.map(s => `
+            <div class="log-entry">
+                <strong>${s.name}駅</strong> <small style="color:#888;">(${s.line})</small> <span style="float:right; font-size:10px;">${s.time}</span>
+            </div>
+        `).join('');
+    }
+
+    function clearLog() {
+        if(confirm("履歴を全て削除しますか？")) {
+            visitedStations = []; localStorage.removeItem('my_station_logs'); renderLog();
+        }
+    }
+</script>
+
 </body>
 </html>
