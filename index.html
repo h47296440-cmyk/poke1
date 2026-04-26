@@ -3,47 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Railway Dashboard Pro - Trace & JSON</title>
+    <title>Railway Dashboard Pro - High Accuracy</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --gauge-size: 260px; --accent: #0f0; --panel-bg: #1a1a1a; }
-        body { font-family: monospace; background: var(--panel-bg); color: #eee; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        :root { --accent: #0f0; --panel-bg: #111; }
+        body { font-family: 'Share Tech Mono', monospace; background: var(--panel-bg); color: #eee; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
         .top-panel { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; background: #222; border-bottom: 2px solid #333; }
         
-        /* 速度計 */
-        .gauge-outer { width: var(--gauge-size); height: var(--gauge-size); background: #f0f0f0; border-radius: 15px; border: 10px solid #111; position: relative; flex-shrink: 0; }
-        .gauge-inner { position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px; background: #fff; border-radius: 50%; overflow: hidden; }
+        /* 速度計コンテナ */
+        .gauge-container { width: 280px; height: 280px; background: #f8f8f8; border-radius: 15px; border: 10px solid #111; position: relative; flex-shrink: 0; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
         #gauge-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
-        .num { position: absolute; color: #333; font-weight: bold; font-family: Arial; font-size: 28px; z-index: 1; }
-        .n0 { bottom: 20px; left: 50px; } .n80 { top: 15px; left: 50%; transform: translateX(-50%); font-size: 34px; } .n160 { bottom: 20px; right: 50px; }
-        .kmh-label { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); color: #333; font-size: 24px; font-weight: bold; z-index: 1; }
-
-        /* マップ */
-        #map { flex-grow: 1; min-width: 300px; height: var(--gauge-size); border-radius: 10px; border: 2px solid #444; }
-
-        /* 下部パネル */
-        .bottom-panel { flex-grow: 1; display: grid; grid-template-columns: 240px 1fr; overflow: hidden; }
-        .stats { background: #111; padding: 15px; border-right: 1px solid #333; font-size: 12px; color: var(--accent); display: flex; flex-direction: column; }
-        .log-container { background: #000; overflow-y: auto; padding: 10px; }
-        .log-entry { padding: 8px; border-bottom: 1px solid #222; font-size: 13px; }
         
-        .btn { background: #444; color: #fff; border: none; padding: 8px; cursor: pointer; font-size: 11px; margin-top: 5px; border-radius: 4px; }
-        .btn-json { background: #0055ff; font-weight: bold; margin-top: auto; }
-        h3 { margin: 0 0 8px 0; font-size: 13px; border-bottom: 1px solid #444; padding-bottom: 4px; color: #fff; }
+        /* メーター中央のデジタル表示 */
+        .gauge-center-digit { position: absolute; top: 62%; left: 50%; transform: translate(-50%, -50%); color: #333; font-size: 24px; font-weight: bold; font-family: Arial; z-index: 3; text-align: center; line-height: 1; }
+        .kmh-label-small { font-size: 10px; display: block; }
+
+        #map { flex-grow: 1; min-width: 300px; height: 280px; border-radius: 10px; border: 2px solid #444; }
+
+        .bottom-panel { flex-grow: 1; display: grid; grid-template-columns: 240px 1fr; overflow: hidden; }
+        .stats { background: #000; padding: 15px; border-right: 1px solid #333; color: var(--accent); overflow-y: auto; }
+        
+        /* メインのデジタル速度表示（超巨大） */
+        .speed-display { background: #1a1a1a; padding: 10px; border-radius: 8px; border-left: 5px solid var(--accent); margin-bottom: 15px; }
+        .speed-val { font-size: 54px; font-weight: bold; color: #fff; line-height: 1; text-shadow: 0 0 15px var(--accent); }
+        .speed-unit { font-size: 14px; color: var(--accent); margin-left: 5px; }
+
+        .log-container { background: #050505; overflow-y: auto; padding: 10px; }
+        .log-entry { padding: 8px; border-bottom: 1px solid #222; font-size: 13px; color: #fff; }
+        
+        .btn { background: #333; color: #fff; border: 1px solid #555; padding: 8px; cursor: pointer; font-size: 11px; margin: 2px; border-radius: 4px; flex-grow: 1; }
+        .btn-scale { background: #444; font-size: 10px; } .btn-scale.active { background: var(--accent); color: #000; font-weight: bold; }
+        h3 { margin: 15px 0 5px 0; font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
     </style>
 </head>
 <body>
 
 <div class="top-panel">
-    <div class="gauge-outer">
-        <div class="gauge-inner">
-            <canvas id="gauge-canvas"></canvas>
-            <div class="num n0">0</div>
-            <div class="num n80">80</div>
-            <div class="num n160">160</div>
-            <div class="kmh-label">km/h</div>
+    <div class="gauge-container">
+        <canvas id="gauge-canvas"></canvas>
+        <div class="gauge-center-digit">
+            <span id="center-speed">0</span>
+            <span class="kmh-label-small">km/h</span>
         </div>
     </div>
     <div id="map"></div>
@@ -51,14 +53,26 @@
 
 <div class="bottom-panel">
     <div class="stats">
+        <h3>⚡ CURRENT VELOCITY</h3>
+        <div class="speed-display">
+            <span id="speed-dg" class="speed-val">0</span><span class="speed-unit">km/h</span>
+        </div>
+        
+        <div style="display:flex;">
+            <button class="btn btn-scale active" onclick="setScale(160)">160km/h</button>
+            <button class="btn btn-scale" onclick="setScale(400)">400km/h</button>
+            <button class="btn btn-scale" onclick="setScale(1200)">1200km/h</button>
+        </div>
+
         <h3>🛰️ TELEMETRY</h3>
-        LAT: <span id="lat">---</span><br>
-        LON: <span id="lon">---</span><br>
-        ALT: <span id="alt">---</span><br>
-        ACC: ±<span id="acc">---</span>m<br><br>
-        <h3>🛠️ TOOLS</h3>
-        <button class="btn" onclick="clearLog()">履歴リセット</button>
-        <button class="btn btn-json" onclick="downloadJSON()">JSONを書き出す</button>
+        <div style="font-size: 12px; line-height: 1.6;">
+            LAT: <span id="lat">---</span><br>
+            LON: <span id="lon">---</span><br>
+            ALT: <span id="alt">---</span> m<br>
+            ACC: ±<span id="acc">---</span> m
+        </div>
+
+        <button class="btn" onclick="downloadJSON()" style="background:#0044cc; border:none; margin-top:20px; font-weight:bold;">JSON記録を出力</button>
     </div>
     <div class="log-container">
         <h3>🕒 STATION LOG</h3>
@@ -69,127 +83,125 @@
 <script>
     let stationLogs = JSON.parse(localStorage.getItem('my_station_logs') || '[]');
     let trackPoints = JSON.parse(localStorage.getItem('my_track_points') || '[]');
+    let maxRange = parseInt(localStorage.getItem('my_max_range') || '160');
+    
     let map, marker, polyline;
-
     const canvas = document.getElementById('gauge-canvas');
     const ctx = canvas.getContext('2d');
     canvas.width = 300; canvas.height = 300;
 
-    // --- 速度計 描画 ---
     function drawGauge(speed) {
         ctx.clearRect(0, 0, 300, 300);
         const cx = 150, cy = 150, r = 125;
-        const start = Math.PI * 0.75;
-        const end = Math.PI * 2.25;
-        const current = start + (Math.min(speed, 160) / 160) * (end - start);
-
-        ctx.save(); ctx.translate(cx, cy);
-        for (let i = 0; i <= 160; i += 2) {
-            ctx.save();
-            ctx.rotate(start - Math.PI/2 + (i/160)*(end-start));
-            ctx.beginPath();
-            ctx.moveTo(0, -r); ctx.lineTo(0, i % 10 === 0 ? -r+15 : -r+5);
-            ctx.strokeStyle = i % 10 === 0 ? '#333' : '#bbb';
-            ctx.lineWidth = i % 10 === 0 ? 3 : 1;
-            ctx.stroke(); ctx.restore();
+        const startRad = Math.PI * 0.75; 
+        const totalAngle = Math.PI * 1.5; 
+        const currentSpeed = Math.min(speed, maxRange);
+        
+        // --- 目盛りと数字 ---
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(startRad);
+        const tickStep = maxRange / 8; 
+        for (let i = 0; i <= maxRange; i += tickStep / 5) {
+            const isMajor = i % tickStep === 0;
+            const angle = (i / maxRange) * totalAngle;
+            ctx.save(); ctx.rotate(angle);
+            ctx.beginPath(); 
+            ctx.moveTo(r, 0); ctx.lineTo(isMajor ? r-18 : r-8, 0);
+            ctx.strokeStyle = isMajor ? '#111' : '#888'; ctx.lineWidth = isMajor ? 3 : 1;
+            ctx.stroke();
+            if (isMajor) {
+                ctx.translate(r - 38, 0); ctx.rotate(-angle - startRad);
+                ctx.fillStyle = '#222'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(Math.round(i), 0, 0);
+            }
+            ctx.restore();
         }
-        ctx.rotate(current + Math.PI/2);
-        ctx.beginPath(); ctx.moveTo(0, 20); ctx.lineTo(0, -r+10);
-        ctx.strokeStyle = '#d00'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fillStyle = '#111'; ctx.fill();
+        ctx.restore();
+
+        // --- 針 ---
+        const currentAngle = startRad + (currentSpeed / maxRange) * totalAngle;
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(currentAngle);
+        ctx.beginPath(); ctx.moveTo(-25, 0); ctx.lineTo(r-5, 0);
+        ctx.strokeStyle = '#e30000'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.fillStyle = '#111'; ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
         ctx.restore();
     }
 
-    // --- 地図 ＆ 軌跡 ---
-    function initMap(lat, lon) {
-        map = L.map('map').setView([lat, lon], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        marker = L.marker([lat, lon]).addTo(map);
-        // 軌跡用ライン
-        polyline = L.polyline(trackPoints, {color: '#0055ff', weight: 5, opacity: 0.7}).addTo(map);
+    function setScale(range) {
+        maxRange = range;
+        localStorage.setItem('my_max_range', maxRange);
+        document.querySelectorAll('.btn-scale').forEach(b => {
+            b.classList.remove('active');
+            if (parseInt(b.innerText) === range) b.classList.add('active');
+        });
+        drawGauge(0);
     }
 
     window.onload = () => {
-        renderLog();
-        drawGauge(0);
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(updatePosition, null, { enableHighAccuracy: true });
-        }
+        renderLog(); setScale(maxRange);
+        if (navigator.geolocation) navigator.geolocation.watchPosition(updatePosition, (e) => console.log(e), { enableHighAccuracy: true });
     };
 
-    async function updatePosition(pos) {
+    function updatePosition(pos) {
         const { latitude, longitude, speed, altitude, accuracy } = pos.coords;
+        // 正確な速度計算（km/h）
         const kmh = speed ? speed * 3.6 : 0;
-        const latlng = [latitude, longitude];
+        const displayKmh = kmh.toFixed(1); // 小数点第一位まで表示
 
-        // テレメトリ更新
-        document.getElementById('lat').textContent = latitude.toFixed(5);
-        document.getElementById('lon').textContent = longitude.toFixed(5);
-        document.getElementById('alt').textContent = altitude ? Math.round(altitude) + "m" : "0m";
-        document.getElementById('acc').textContent = Math.round(accuracy);
+        // デジタル表示（メイン & メーター中央）
+        document.getElementById('speed-dg').textContent = displayKmh;
+        document.getElementById('center-speed').textContent = Math.round(kmh);
+        
+        // 針の更新
         drawGauge(kmh);
 
-        // 軌跡の追加と保存（精度が良い時だけ保存）
+        // テレメトリ
+        document.getElementById('lat').textContent = latitude.toFixed(5);
+        document.getElementById('lon').textContent = longitude.toFixed(5);
+        document.getElementById('alt').textContent = altitude ? Math.round(altitude) : "0";
+        document.getElementById('acc').textContent = Math.round(accuracy);
+
+        // 地図・軌跡
+        const latlng = [latitude, longitude];
         if (accuracy < 50) {
             trackPoints.push(latlng);
-            if(trackPoints.length > 2000) trackPoints.shift(); // メモリ節約
+            if(trackPoints.length > 5000) trackPoints.shift();
             localStorage.setItem('my_track_points', JSON.stringify(trackPoints));
         }
 
-        // 地図更新
         if (!map) {
-            initMap(latitude, longitude);
+            map = L.map('map').setView(latlng, 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            marker = L.marker(latlng).addTo(map);
+            polyline = L.polyline(trackPoints, {color: '#0055ff', weight: 5}).addTo(map);
         } else {
-            marker.setLatLng(latlng);
-            polyline.setLatLngs(trackPoints);
-            map.panTo(latlng);
+            marker.setLatLng(latlng); polyline.setLatLngs(trackPoints); map.panTo(latlng);
         }
 
-        // 駅取得
-        try {
-            const res = await fetch(`https://express.heartrails.com/api/json?method=getStations&x=${longitude}&y=${latitude}`);
-            const data = await res.json();
-            const s = data.response.station?.[0];
-            if (s && !stationLogs.some(i => i.name === s.name)) {
-                stationLogs.unshift({ name: s.name, line: s.line, time: new Date().toLocaleString('ja-JP'), lat: latitude, lon: longitude });
-                localStorage.setItem('my_station_logs', JSON.stringify(stationLogs));
-                renderLog();
-            }
-        } catch (e) {}
+        // 駅ログ取得（日本国内のみ）
+        if (latitude > 20 && latitude < 50 && longitude > 120 && longitude < 155) {
+            fetch(`https://express.heartrails.com/api/json?method=getStations&x=${longitude}&y=${latitude}`)
+                .then(r => r.json()).then(data => {
+                    const s = data.response.station?.[0];
+                    if (s && !stationLogs.some(i => i.name === s.name)) {
+                        stationLogs.unshift({ name: s.name, line: s.line, time: new Date().toLocaleTimeString() });
+                        localStorage.setItem('my_station_logs', JSON.stringify(stationLogs));
+                        renderLog();
+                    }
+                }).catch(e => {});
+        }
     }
 
     function renderLog() {
-        const list = document.getElementById('log-list');
-        list.innerHTML = stationLogs.map(s => `
-            <div class="log-entry">
-                <b>${s.name}駅</b> <small>(${s.line})</small><br>
-                <span style="font-size:10px; color:#888;">${s.time}</span>
-            </div>
+        document.getElementById('log-list').innerHTML = stationLogs.map(s => `
+            <div class="log-entry"><b>${s.name}駅</b> <small>(${s.line})</small> - ${s.time}</div>
         `).join('');
     }
 
-    // --- JSONダウンロード機能 ---
     function downloadJSON() {
-        const fullData = {
-            export_date: new Date().toISOString(),
-            stations: stationLogs,
-            track: trackPoints
-        };
-        const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `station_trace_${new Date().getTime()}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    function clearLog() {
-        if(confirm("全てのデータを消去しますか？")) {
-            stationLogs = []; trackPoints = [];
-            localStorage.clear();
-            location.reload();
-        }
+        const data = { date: new Date(), stations: stationLogs, track: trackPoints };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `trip_data.json`; a.click();
     }
 </script>
 </body>
