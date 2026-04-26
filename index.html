@@ -3,182 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Realistic Train Gauge</title>
+    <title>現在地取得テスト</title>
     <style>
-        :root { --gauge-size: 320px; }
-        body { font-family: 'Courier New', Courier, monospace; background: #222; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        
-        /* 速度計の外枠 (画像を再現) */
-        .gauge-outer { width: var(--gauge-size); height: var(--gauge-size); background: #f0f0f0; border-radius: 20px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5), 10px 10px 20px rgba(0,0,0,0.8); border: 15px solid #111; position: relative; overflow: hidden; }
-        .gauge-inner { position: absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; background: #fff; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.5); overflow: hidden; }
-        
-        /* 数字の配置 (CSSで繊細に) */
-        .num { position: absolute; color: #333; font-weight: bold; font-family: Arial, sans-serif; }
-        .num-0   { bottom: 25px; left: 65px; font-size: 40px; }
-        .num-20  { bottom: 65px; left: 35px; font-size: 40px; }
-        .num-40  { top: 110px;   left: 20px; font-size: 40px; }
-        .num-60  { top: 50px;    left: 45px; font-size: 40px; }
-        .num-80  { top: 25px;    left: 135px; font-size: 45px; } /* 80は一番上 */
-        .num-100 { top: 50px;    right: 45px; font-size: 40px; }
-        .num-120 { top: 110px;   right: 20px; font-size: 40px; }
-        .num-140 { bottom: 65px; right: 35px; font-size: 40px; }
-        .num-160 { bottom: 25px; right: 65px; font-size: 40px; }
-
-        /* ロゴとラベル */
-        .logo { position: absolute; top: 120px; left: 50%; transform: translateX(-50%); color: #ccc; font-size: 14px; opacity: 0.5; }
-        .kmh-label { position: absolute; bottom: 35px; left: 50%; transform: translateX(-50%); color: #333; font-size: 35px; font-weight: bold; font-family: Arial, sans-serif; }
-        .jis-logo { position: absolute; bottom: 60px; right: 80px; width: 15px; height: 15px; border: 1px solid #333; border-radius: 50%; color: #333; font-size: 8px; text-align: center; line-height: 15px; font-family: sans-serif; }
-
-        /* Canvas (目盛りと針) */
-        #gauge-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-
-        /* テレメトリエリア */
-        .telemetry { width: var(--gauge-size); background: #333; margin-top: 20px; padding: 15px; border-radius: 10px; border: 1px solid #555; }
-        .stat { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; color: #0f0; }
-        #status-bar { width: var(--gauge-size); background: #111; color: #f00; text-align: center; padding: 5px; margin-top: 10px; font-size: 12px; }
+        body { font-family: sans-serif; text-align: center; padding: 50px; }
+        #status { margin-bottom: 20px; font-weight: bold; }
+        #result { background: #f0f0f0; padding: 20px; border-radius: 8px; display: inline-block; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div class="gauge-outer">
-        <div class="gauge-inner">
-            <canvas id="gauge-canvas"></canvas>
-            
-            <div class="num num-0">0</div>
-            <div class="num num-20">20</div>
-            <div class="num num-40">40</div>
-            <div class="num num-60">60</div>
-            <div class="num num-80">80</div>
-            <div class="num num-100">100</div>
-            <div class="num num-120">120</div>
-            <div class="num num-140">140</div>
-            <div class="num num-160">160</div>
-
-            <div class="logo">TOYO</div>
-            <div class="kmh-label">km/h</div>
-            <div class="jis-logo">JIS</div>
-        </div>
+    <h2>GPS現在地取得テスト</h2>
+    <p id="status">ボタンを押して位置情報の許可をしてください</p>
+    
+    <div id="result">
+        <p>緯度: <span id="latitude">---</span></p>
+        <p>経度: <span id="longitude">---</span></p>
     </div>
+    
+    <br><br>
+    <button onclick="getLocation()">現在地を取得する</button>
 
-    <div class="telemetry">
-        <div class="stat"><span>LAT</span><span id="lat">---</span></div>
-        <div class="stat"><span>LON</span><span id="lon">---</span></div>
-        <div class="stat"><span>ALT</span><span id="alt">---</span></div>
-        <div class="stat"><span>SPEED(DG)</span><span id="speed-dg">0</span> km/h</div>
-    </div>
+    <script>
+        function getLocation() {
+            const status = document.getElementById("status");
+            const latDisplay = document.getElementById("latitude");
+            const lonDisplay = document.getElementById("longitude");
 
-    <div id="status-bar">GPS受信待機中...</div>
-
-<script>
-    // Canvasの設定
-    const canvas = document.getElementById('gauge-canvas');
-    const ctx = canvas.getContext('2d');
-    const size = 300; // gauge-innerのサイズに合わせる
-    canvas.width = size; canvas.height = size;
-
-    // メーターの設定 (画像から割り出し)
-    const centerX = size / 2;
-    const centerY = size / 2;
-    const radius = size * 0.45;
-    const startAngle = Math.PI * 0.75; // 0km/hの位置 (左下)
-    const endAngle = Math.PI * 2.25;   // 160km/hの位置 (右下)
-    const angleRange = endAngle - startAngle;
-
-    function drawGaugeBackground() {
-        ctx.clearRect(0, 0, size, size);
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate(startAngle); // 0km/hの角度を基準にする
-
-        // 1. 繊細な目盛りの描画
-        for (let s = 0; s <= 160; s += 2) {
-            ctx.save();
-            const angle = (s / 160) * angleRange;
-            ctx.rotate(angle);
-
-            ctx.beginPath();
-            ctx.moveTo(radius - 5, 0);
-            ctx.lineTo(radius, 0);
-
-            if (s % 10 === 0) {
-                // 10km/hごとの太い目盛り
-                ctx.strokeStyle = '#333'; ctx.lineWidth = 3;
-                ctx.moveTo(radius - 15, 0);
-            } else if (s % 2 === 0) {
-                // 2km/hごとの細い目盛り
-                ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
+            // ブラウザがGeolocation APIに対応しているか確認
+            if (!navigator.geolocation) {
+                status.textContent = "お使いのブラウザは位置情報に対応していません。";
+                return;
             }
-            ctx.stroke();
-            ctx.restore();
+
+            status.textContent = "取得中...";
+
+            // 位置情報の取得を実行
+            navigator.geolocation.getCurrentPosition(
+                // 成功した時の処理
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+
+                    status.textContent = "取得成功！";
+                    latDisplay.textContent = lat;
+                    lonDisplay.textContent = lon;
+                },
+                // 失敗した時の処理（エラーハンドリング）
+                (error) => {
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            status.textContent = "位置情報の利用が拒否されました。";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            status.textContent = "位置情報が利用できません。";
+                            break;
+                        case error.TIMEOUT:
+                            status.textContent = "タイムアウトしました。";
+                            break;
+                        default:
+                            status.textContent = "不明なエラーが発生しました。";
+                            break;
+                    }
+                }
+            );
         }
-        ctx.restore();
-    }
-
-    function drawNeedle(speed) {
-        // 背景（目盛り）を再描画
-        drawGaugeBackground();
-
-        // 2. 針の描画 (画像のデザインを再現)
-        const currentSpeed = Math.min(speed, 160);
-        const angle = startAngle + (currentSpeed / 160) * angleRange;
-
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate(angle);
-
-        // 針の本体
-        ctx.beginPath();
-        ctx.moveTo(-20, 0); // 根元を少し後ろへ
-        ctx.lineTo(radius - 20, 0); // 先端
-        ctx.strokeStyle = '#111'; ctx.lineWidth = 4; ctx.stroke();
-
-        // 根元の黒い円 (画像の中心部分)
-        ctx.beginPath();
-        ctx.arc(0, 0, 15, 0, Math.PI * 2);
-        ctx.fillStyle = '#111'; ctx.fill();
-        
-        // 中心の白い点
-        ctx.beginPath();
-        ctx.arc(0, 0, 3, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff'; ctx.fill();
-
-        ctx.restore();
-    }
-
-    // --- Geolocation ---
-    const latDiv = document.getElementById('lat');
-    const lonDiv = document.getElementById('lon');
-    const altDiv = document.getElementById('alt');
-    const speedDgDiv = document.getElementById('speed-dg');
-    const statusDiv = document.getElementById('status-bar');
-
-    // 初期描画
-    drawNeedle(0);
-
-    if (!navigator.geolocation) {
-        statusDiv.textContent = "GPS非対応ブラウザです";
-    } else {
-        statusDiv.textContent = "GPS許可待ち...";
-        navigator.geolocation.watchPosition((pos) => {
-            statusDiv.textContent = "正常動作中";
-            statusDiv.style.color = "#0f0";
-
-            const c = pos.coords;
-            latDiv.textContent = c.latitude.toFixed(5);
-            lonDiv.textContent = c.longitude.toFixed(5);
-            altDiv.textContent = c.altitude ? Math.round(c.altitude) + "m" : "--";
-            
-            const kmh = c.speed ? c.speed * 3.6 : 0;
-            // デジタル表示
-            speedDgDiv.textContent = Math.round(kmh);
-            // アナログ針移動
-            drawNeedle(kmh);
-
-        }, (err) => {
-            statusDiv.textContent = `GPSエラー: ${err.message}`;
-            statusDiv.style.color = "#f00";
-        }, { enableHighAccuracy: true });
-    }
-</script>
+    </script>
 </body>
 </html>
