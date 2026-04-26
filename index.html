@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Railway Dashboard - Share Ed.</title>
+    <title>Railway Dashboard - Final Share Ed.</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --accent: #0f0; --panel-bg: #111; --danger: #ff4444; --warning: #ffaa00; --line: #06c755; }
+        :root { --accent: #0f0; --panel-bg: #111; --danger: #ff4444; --warning: #ffaa00; }
         body { font-family: 'Share Tech Mono', monospace; background: var(--panel-bg); color: #eee; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
+        /* トップパネル */
         .top-panel { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; background: #222; border-bottom: 2px solid #333; position: relative; }
         .gauge-container { width: 260px; height: 260px; background: #f8f8f8; border-radius: 15px; border: 10px solid #111; position: relative; flex-shrink: 0; }
         #gauge-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
@@ -18,6 +19,7 @@
 
         .settings-trigger { position: absolute; top: 15px; right: 15px; z-index: 1000; background: rgba(0,0,0,0.6); border: 1px solid #555; color: #fff; padding: 8px 12px; border-radius: 5px; cursor: pointer; }
 
+        /* ボトムパネル */
         .bottom-panel { flex-grow: 1; display: grid; grid-template-columns: 280px 1fr; overflow: hidden; }
         .panel { padding: 15px; border-right: 1px solid #333; overflow-y: auto; background: #000; }
         
@@ -28,11 +30,11 @@
         .data-label { color: #888; font-size: 9px; display: block; }
         .data-num { color: #fff; font-size: 16px; font-weight: bold; }
 
-        /* シェアボタン */
-        .share-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; font-size: 12px; margin-bottom: 5px; width: 100%; text-decoration: none; color: #fff; }
-        .btn-line { background: var(--line); }
-        .btn-copy { background: #444; }
+        /* 標準シェアボタン */
+        .btn-share { background: #fff; color: #000; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 14px; }
+        .btn-share:active { background: #ccc; }
 
+        /* 設定モーダル */
         #settings-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; overflow-y: auto; padding: 20px; box-sizing: border-box; }
         .modal-content { max-width: 600px; margin: 0 auto; background: #222; padding: 20px; border-radius: 10px; }
         
@@ -64,13 +66,19 @@
             <div class="data-box"><span class="data-label">G-FORCE</span><span id="accel" class="data-num">0.0</span></div>
         </div>
 
-        <h3>📢 SHARE / PUBLISH</h3>
-        <button class="share-btn btn-line" onclick="shareToLine()">LINEに送る</button>
-        <button class="share-btn btn-copy" onclick="copyForYT()">YouTube/SNS用コピー</button>
+        <button class="btn-share" onclick="nativeShare()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            SHARE REPORT
+        </button>
 
         <h3>📏 DISTANCE</h3>
         <div class="data-box" style="margin-bottom:8px;"><span class="data-label">TODAY</span><span id="dist-today" class="data-num" style="color:var(--accent);">0.00</span><small> km</small></div>
         <div class="data-box"><span class="data-label">TOTAL</span><span id="dist-total" class="data-num">0.00</span><small> km</small></div>
+
+        <h3>🛰️ POSITION</h3>
+        <div style="font-size:11px; line-height:1.6; color:#888;">
+            ALT: <span id="alt" style="color:#fff;">---</span> m | ACC: ±<span id="acc" style="color:#fff;">---</span> m
+        </div>
     </div>
 
     <div class="panel log-container">
@@ -83,7 +91,7 @@
     <div class="modal-content">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <h2 style="margin:0; font-size:18px;">⚙ SETTINGS & ABOUT</h2>
-            <button onclick="toggleSettings()" style="background:none; border:none; color:#fff; font-size:24px;">&times;</button>
+            <button onclick="toggleSettings()" style="background:none; border:none; color:#fff; font-size:24px;">×</button>
         </div>
 
         <h3>📅 DAILY HISTORY</h3>
@@ -97,13 +105,13 @@
         </div>
 
         <h3>📂 DATA MANAGEMENT</h3>
-        <button class="btn" style="background:#0044cc;" onclick="downloadJSON()">JSONを書き出す</button>
+        <button class="btn" style="background:#0044cc;" onclick="downloadJSON()">JSONを書き出す (バックアップ)</button>
         <label class="btn" style="display:block; text-align:center;">JSONをインポート<input type="file" id="import-json" accept=".json" style="display:none;"></label>
-        <button class="btn" onclick="clearLog()" style="color:var(--danger);">全データ消去</button>
+        <button class="btn" onclick="clearLog()" style="color:var(--danger); border-color:#422;">全データをリセット</button>
 
         <h3>⚖️ 利用規約・免責事項</h3>
         <div class="warning-card">
-            位置情報の共有・公開（LINE・SNS送信を含む）により生じたいかなる被害についても、本アプリは一切の責任を負いません。特に自宅付近等でのシェアには十分ご注意ください。記録はブラウザ一時保存のため消失に備えJSON出力を推奨します。
+            <b>【重要】</b>位置情報の共有・公開により生じたいかなる被害についても、本アプリは一切の責任を負いません。記録はブラウザ一時保存のため消失の可能性があるため、こまめなJSON保存を強く推奨します。
         </div>
     </div>
 </div>
@@ -119,20 +127,22 @@
     let maxRange = parseInt(localStorage.getItem('my_max_range') || '160');
 
     let map, marker, polyline;
-    let lastTime = Date.now(), lastSpeed = 0, lastCoord = null, currentCoords = null;
+    let lastTime = Date.now(), lastSpeed = 0, lastCoord = null;
     const canvas = document.getElementById('gauge-canvas');
     const ctx = canvas.getContext('2d');
     canvas.width = 300; canvas.height = 300;
 
-    // --- シェア機能 ---
-    function shareToLine() {
-        const text = `【Railway Dash Report】\n速度: ${lastSpeed.toFixed(1)} km/h\n本日走行: ${todayDist.toFixed(2)} km\n高度: ${document.getElementById('alt').textContent} m\n現在地: https://www.google.com/maps?q=${currentCoords.lat},${currentCoords.lon}`;
-        window.open(`https://line.me/R/msg/text/?${encodeURIComponent(text)}`, '_blank');
-    }
-
-    function copyForYT() {
-        const text = `Current Velocity: ${lastSpeed.toFixed(1)}km/h | Alt: ${document.getElementById('alt').textContent}m | Tracked: ${todayDist.toFixed(2)}km`;
-        navigator.clipboard.writeText(text).then(() => alert("YouTube/SNS用テキストをコピーしました！"));
+    // --- OS標準シェア機能 ---
+    async function nativeShare() {
+        const text = `【Railway Dash Report】\n速度: ${lastSpeed.toFixed(1)} km/h\n最高: ${maxSpeed.toFixed(1)} km/h\n本日走行: ${todayDist.toFixed(2)} km\n高度: ${document.getElementById('alt').textContent} m`;
+        
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: 'Railway Trip Report', text: text });
+            } catch (err) { console.log('Share failed', err); }
+        } else {
+            navigator.clipboard.writeText(text).then(() => alert("シェア機能未対応のため、クリップボードにコピーしました。"));
+        }
     }
 
     function toggleSettings() {
@@ -195,7 +205,7 @@
                     localStorage.setItem('my_daily_history', JSON.stringify(data.dailyHistory || []));
                     location.reload();
                 }
-            } catch (err) { alert('形式エラー'); }
+            } catch (err) { alert('読み込み失敗'); }
         };
         reader.readAsText(file);
     });
@@ -224,13 +234,15 @@
         const { latitude, longitude, speed, altitude, accuracy } = pos.coords;
         const kmh = speed ? speed * 3.6 : 0;
         const now = Date.now();
-        currentCoords = {lat: latitude, lon: longitude};
 
+        // MAX速度とGセンサー
         if (kmh > maxSpeed) { maxSpeed = kmh; localStorage.setItem('my_max_speed', maxSpeed); }
-        const gForce = ((kmh - lastSpeed) / ((now - lastTime) / 1000)).toFixed(1);
+        const dt = (now - lastTime) / 1000;
+        const gForce = dt > 0 ? ((kmh - lastSpeed) / dt).toFixed(1) : "0.0";
         
+        // 距離計算
         if (lastCoord && accuracy < 30) {
-            const d = getDistance(lastCoord, currentCoords);
+            const d = getDistance(lastCoord, {lat: latitude, lon: longitude});
             if (d > 0.002) { 
                 totalDist += d; todayDist += d;
                 localStorage.setItem('my_total_dist', totalDist); 
@@ -238,15 +250,15 @@
             }
         }
 
+        // 表示更新
         document.getElementById('speed-dg').textContent = kmh.toFixed(1);
         document.getElementById('center-speed').textContent = Math.round(kmh);
         document.getElementById('max-speed').textContent = Math.round(maxSpeed);
         document.getElementById('accel').textContent = gForce;
         document.getElementById('dist-total').textContent = totalDist.toFixed(2);
         document.getElementById('dist-today').textContent = todayDist.toFixed(2);
-        const altEl = document.createElement('span'); altEl.id = 'alt'; altEl.textContent = altitude ? Math.round(altitude) : "---";
-        const accEl = document.createElement('span'); accEl.id = 'acc'; accEl.textContent = Math.round(accuracy);
-        document.querySelector('.stats div[style*="font-size:11px"]').innerHTML = `ALT: ${altEl.outerHTML} m | ACC: ±${accEl.outerHTML} m`;
+        document.getElementById('alt').textContent = altitude ? Math.round(altitude) : "---";
+        document.getElementById('acc').textContent = Math.round(accuracy);
         
         drawGauge(kmh);
         if (accuracy < 50) {
@@ -254,7 +266,7 @@
             localStorage.setItem('my_track_points', JSON.stringify(trackPoints));
             updateMap(latitude, longitude);
         }
-        lastTime = now; lastSpeed = kmh; lastCoord = currentCoords;
+        lastTime = now; lastSpeed = kmh; lastCoord = {lat: latitude, lon: longitude};
     }
 
     function updateMap(lat, lon) {
@@ -281,10 +293,10 @@
         const data = { stations: stationLogs, track: trackPoints, totalDist, dailyHistory, maxSpeed };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-        a.download = `TripLog_Backup.json`; a.click();
+        a.download = `Railway_TripLog.json`; a.click();
     }
 
-    function clearLog() { if(confirm("全消去？")) { localStorage.clear(); location.reload(); } }
+    function clearLog() { if(confirm("設定・履歴を含む全データをリセットします。よろしいですか？")) { localStorage.clear(); location.reload(); } }
 </script>
 </body>
 </html>
